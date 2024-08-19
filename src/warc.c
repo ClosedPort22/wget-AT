@@ -1650,10 +1650,6 @@ _("CDX file does not list record ids. (Missing column 'u'.)\n"));
     {
       int nrecords;
 
-      /* init the hash table */
-      warc_dedup_table = hash_table_new (1000, warc_hash_sha1_digest,
-                                         warc_cmp_sha1_digest);
-
       /* Load CDX data into the table. */
 
       do
@@ -1732,6 +1728,10 @@ warc_init (void)
 
   if (opt.warc_filename != NULL)
     {
+      /* init the hash table */
+      warc_dedup_table = hash_table_new (1000, warc_hash_sha1_digest,
+                                         warc_cmp_sha1_digest);
+
       if (opt.warc_cdx_dedup_filename != NULL)
         {
           if (! warc_load_cdx_dedup_file ())
