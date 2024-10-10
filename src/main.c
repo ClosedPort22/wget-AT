@@ -1785,9 +1785,8 @@ for details.\n\n"));
       if (opt.noclobber)
         {
           fprintf (stderr,
-                   _("WARC output does not work with --no-clobber, "
-                     "--no-clobber will be disabled.\n"));
-          opt.noclobber = false;
+                   _("Both --warc-file and --no-clobber were specified; "
+                     "--no-clobber will not apply to WARC output.\n"));
         }
       if (opt.timestamping)
         {
