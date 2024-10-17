@@ -2160,7 +2160,7 @@ warc_write_response_record (const char *url, const char *timestamp_str,
       return false;
     }
 
-  if (opt.warc_digests_enabled || !opt.warc_dedup_disable)
+  if (opt.warc_digests_enabled)
     {
       /* Calculate the block and payload digests. */
       rewind (body);
