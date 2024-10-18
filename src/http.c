@@ -1670,7 +1670,7 @@ read_response_body (struct http_stat *hs, int sock, FILE *fp, wgint contlen,
   int flags = 0;
   bool write_to_warc = true;
   char *url = u->url;
-  char sha1_no_transfer_encoding[SHA1_DIGEST_SIZE];
+  char sha1_no_transfer_encoding[SHA1_DIGEST_SIZE] = {0};
 
   if (opt.warc_filename != NULL)
     {

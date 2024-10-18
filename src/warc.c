@@ -1700,7 +1700,7 @@ warc_find_duplicate_cdx_record (const char *url, const char *sha1_digest_payload
   struct warc_dedup_record *rec_existing;
   struct warc_dedup_key *key;
 
-  if (warc_dedup_table == NULL)
+  if (opt.warc_dedup_disable || warc_dedup_table == NULL)
     return NULL;
 
   key = xmalloc (sizeof (struct warc_dedup_key));
