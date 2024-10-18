@@ -2035,7 +2035,7 @@ warc_write_cdx_record (const char *url, const char *timestamp_str,
   timestamp_str_cdx[14] = '\0';
 
   /* Rewrite the checksum. */
-  if (payload_digest != NULL)
+  if (payload_digest != NULL && *payload_digest)
     checksum = payload_digest + 5; /* Skip the "sha1:" */
   else
     checksum = "-";
@@ -2277,8 +2277,11 @@ warc_write_response_record (const char *url, const char *timestamp_str,
   warc_write_header ("WARC-Target-URI", url);
   date = warc_write_date_header (timestamp_str);
   warc_write_ip_header (ip);
-  warc_write_header ("WARC-Block-Digest", block_digest);
-  warc_write_header ("WARC-Payload-Digest", payload_digest);
+  if (opt.warc_digests_enabled)
+    {
+      warc_write_header ("WARC-Block-Digest", block_digest);
+      warc_write_header ("WARC-Payload-Digest", payload_digest);
+    }
   if (opt.warc_item_name != NULL)
     warc_write_header ("X-Wget-AT-Project-Item-Name", opt.warc_item_name);
   warc_write_header ("Content-Type", "application/http;msgtype=response");
