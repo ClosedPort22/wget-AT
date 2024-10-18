@@ -2165,17 +2165,23 @@ warc_write_response_record (const char *url, const char *timestamp_str,
       /* Calculate the block and payload digests. */
       rewind (body);
 
-      if (sha1_stream(body, sha1_res_block) == 0)
+      if (sha1_stream(body, sha1_res_block) != 0)
         {
-          /* Decide (based on url + payload digest) if we have seen this
-             data before. */
-          struct warc_dedup_record *rec_existing;
-          rec_existing = warc_find_duplicate_cdx_record (url, sha1_res_payload);
+          warc_write_ok = false;
+          return false;
+        }
 
-          if (rec_existing == NULL){
-            warc_base32_sha1_digest (sha1_res_payload, payload_digest, sizeof(payload_digest));
-            struct luahooks_revisit *revisit_cdx = luahooks_dedup_response (url, payload_digest);
-            if(revisit_cdx != NULL) {
+      /* Decide (based on --warc-dedup-url-agnostic) if we have seen this
+          data before. */
+      struct warc_dedup_record *rec_existing;
+      rec_existing = warc_find_duplicate_cdx_record (url, sha1_res_payload);
+
+      if (rec_existing == NULL)
+        {
+          warc_base32_sha1_digest (sha1_res_payload, payload_digest, sizeof(payload_digest));
+          struct luahooks_revisit *revisit_cdx = luahooks_dedup_response (url, payload_digest);
+          if (revisit_cdx != NULL)
+            {
               rec_existing = xmalloc (sizeof (struct warc_dedup_record));
 
               rec_existing->uri = revisit_cdx->target_uri;
@@ -2186,68 +2192,62 @@ warc_write_response_record (const char *url, const char *timestamp_str,
               xfree(revisit_cdx);
               luahooks_revisit_malloc = true;
             }  
-          }
-
-          if (rec_existing != NULL)
-            {
-              /* Check the size of the payload in case a minimum number of
-                 bytes is set for the payload to deduplicate. */
-              if (opt.warc_dedup_min_size > 0)
-                {
-                  if (fseeko (body, 0L, SEEK_END) != 0)
-                    {
-                      warc_write_ok = false;
-                      return false;
-                    }
-                  offset = ftello (body);
-                  if (offset < 0)
-                    {
-                      warc_write_ok = false;
-                      return false;
-                    }
-                  write_revisit = ((offset - payload_offset) >= opt.warc_dedup_min_size);
-                  if (fseeko (body, 0L, SEEK_SET) != 0)
-                    {
-                      warc_write_ok = false;
-                      return false;
-                    }
-                }
-              else
-                write_revisit = true;
-
-              /* If the payload is large enough, write a revisit record. */
-              if (write_revisit)
-                {
-                  bool result;
-
-                  /* Found an existing record. */
-                  logprintf (LOG_VERBOSE,
-              _("Found exact match in CDX file or a LUA hook. Saving revisit record to WARC.\n"));
-
-                  /* Remove the payload from the file. */
-                  if (payload_offset > 0 && ftruncate (fileno (body), payload_offset) == -1)
-                    {
-                      warc_write_ok = false;
-                      return false;
-                    }
-
-                  /* Send the original payload digest. */
-                  warc_base32_sha1_digest (sha1_res_payload, payload_digest, sizeof(payload_digest));
-                  result = warc_write_revisit_record (url, timestamp_str,
-                             concurrent_to_uuid, payload_digest, rec_existing->uuid,
-                             rec_existing->uri, rec_existing->date, ip, body, protocol, cipher_name);
-                  if (luahooks_revisit_malloc == true) xfree(rec_existing);
-                  return result;
-                }
-            }
-          warc_base32_sha1_digest (sha1_res_block, block_digest, sizeof(block_digest));
-          warc_base32_sha1_digest (sha1_res_payload, payload_digest, sizeof(payload_digest));
         }
       else
         {
-          warc_write_ok = false;
-          return false;
+          /* Check the size of the payload in case a minimum number of
+              bytes is set for the payload to deduplicate. */
+          if (opt.warc_dedup_min_size > 0)
+            {
+              if (fseeko (body, 0L, SEEK_END) != 0)
+                {
+                  warc_write_ok = false;
+                  return false;
+                }
+              offset = ftello (body);
+              if (offset < 0)
+                {
+                  warc_write_ok = false;
+                  return false;
+                }
+              write_revisit = ((offset - payload_offset) >= opt.warc_dedup_min_size);
+              if (fseeko (body, 0L, SEEK_SET) != 0)
+                {
+                  warc_write_ok = false;
+                  return false;
+                }
+            }
+          else
+            write_revisit = true;
+
+          /* If the payload is large enough, write a revisit record. */
+          if (write_revisit)
+            {
+              bool result;
+
+              /* Found an existing record. */
+              logprintf (LOG_VERBOSE,
+          _("Found exact match in CDX file or a LUA hook. Saving revisit record to WARC.\n"));
+
+              /* Remove the payload from the file. */
+              if (payload_offset > 0 && ftruncate (fileno (body), payload_offset) == -1)
+                {
+                  warc_write_ok = false;
+                  return false;
+                }
+
+              /* Send the original payload digest. */
+              warc_base32_sha1_digest (sha1_res_payload, payload_digest, sizeof(payload_digest));
+              result = warc_write_revisit_record (url, timestamp_str,
+                          concurrent_to_uuid, payload_digest, rec_existing->uuid,
+                          rec_existing->uri, rec_existing->date, ip, body, protocol, cipher_name);
+              if (luahooks_revisit_malloc == true)
+                xfree(rec_existing);
+              return result;
+            }
         }
+      warc_base32_sha1_digest (sha1_res_block, block_digest, sizeof(block_digest));
+      warc_base32_sha1_digest (sha1_res_payload, payload_digest, sizeof(payload_digest));
     }
 
   /* Not a revisit, just store the record. */
