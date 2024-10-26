@@ -1983,7 +1983,13 @@ initialize_request (const struct url *u, struct http_stat *hs, int *dt, struct u
   else
     {
       request_set_header (req, "Connection", "Keep-Alive", rel_none);
-      if (proxy)
+      if (proxy
+#ifdef HAVE_SSL
+          /* When using SSL over proxy, do not send Proxy-Connection
+          in the inner (SSL-wrapped) request */
+          && u->scheme != SCHEME_HTTPS
+#endif
+          )
         request_set_header (req, "Proxy-Connection", "Keep-Alive", rel_none);
     }
 
@@ -2153,6 +2159,8 @@ establish_connection (const struct url *u, const struct url **conn_ref,
           request_set_header (connreq, "Host",
                               aprintf ("%s:%d", u->host, u->port),
                               rel_value);
+          if (!inhibit_keep_alive)
+            request_set_header (connreq, "Proxy-Connection", "Keep-Alive", rel_none);
 
           write_error = request_send (connreq, sock, 0);
           request_free (&connreq);
