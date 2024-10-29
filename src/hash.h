@@ -61,6 +61,7 @@ int hash_table_count (const struct hash_table *);
 struct hash_table *make_string_hash_table (int);
 struct hash_table *make_nocase_string_hash_table (int);
 
+unsigned long hash_string (const void *);
 unsigned long hash_pointer (const void *);
 
 #endif /* HASH_H */

@@ -138,7 +138,6 @@ struct warc_dedup_record
   char *uri;
   char *date;
   char *uuid;
-  char *digest[SHA1_DIGEST_SIZE];
 };
 
 struct warc_dedup_key
@@ -147,56 +146,44 @@ struct warc_dedup_key
   char digest[SHA1_DIGEST_SIZE];
 };
 
-/* Calculates the hash of the warc_dedup_key for the hash table. If URL agnostic
-   deduplication is enabled, a SHA1 hash is calculated over the url, after which
-   a final SHA1 hash is calculated over the combination of the digest and the
-   hash of the URL. If not URL agnostic deduplication is used the digest is
-   used as final SHA1 hash.
-
-   The first bytes of the SHA1 hash are used as unsigned long hash for the hash
-   table. */
 static unsigned long
-warc_hash_sha1_digest (const void *key)
+warc_hash_url_gnostic (const void *key)
+{
+  const struct warc_dedup_key *dedup_key = key;
+
+  /* Combine the first bytes of payload digest with the hash of uri */
+  return *(unsigned long*) dedup_key->digest + hash_string (dedup_key->uri);
+}
+
+static unsigned long
+warc_hash_url_agnostic (const void *key)
 {
   const struct warc_dedup_key *dedup_key = key;
   unsigned long v = 0;
 
-  /* If URL agnostic deduplication is enabled, only the payload SHA1 hash is
-     used for the hash table index. If this is not enabled, the URI is hashed
-     as well and a hash of the concatenated digest and URI hashes is used for
-     the hash table index. */
-  if (opt.warc_dedup_url_agnostic)
-    memcpy (&v, dedup_key->digest, sizeof (unsigned long));
-  else
-    {
-      char digest[SHA1_DIGEST_SIZE*2];
-      char compare_digest[SHA1_DIGEST_SIZE];
-
-      memcpy(digest, dedup_key->digest, SHA1_DIGEST_SIZE);
-      sha1_buffer(dedup_key->uri, strlen(dedup_key->uri),
-                  digest + SHA1_DIGEST_SIZE);
-      sha1_buffer(digest, SHA1_DIGEST_SIZE*2, compare_digest);
-
-      memcpy (&v, compare_digest, sizeof (unsigned long));
-    }
-
+  /* We just use some of the first bytes of the digest and ignore the uri */
+  memcpy (&v, dedup_key->digest, sizeof (unsigned long));
   return v;
 }
 
-/* Checks the exact identity of the data from the hash table. If URL agnostic
-   deduplication is enabled, only the digest is compared, else both the URL and
-   the digest are compared. */
 static int
-warc_cmp_sha1_digest (const void *key1, const void *key2)
+warc_cmp_url_gnostic (const void *key1, const void *key2)
 {
   const struct warc_dedup_key *record1 = key1;
   const struct warc_dedup_key *record2 = key2;
 
   return memcmp (record1->digest, record2->digest, SHA1_DIGEST_SIZE) == 0 &&
-      (strcmp (record1->uri, record2->uri) == 0 || opt.warc_dedup_url_agnostic);
+      strcmp (record1->uri, record2->uri) == 0;
 }
 
+static int
+warc_cmp_url_agnostic (const void *key1, const void *key2)
+{
+  const struct warc_dedup_key *record1 = key1;
+  const struct warc_dedup_key *record2 = key2;
 
+  return memcmp (record1->digest, record2->digest, SHA1_DIGEST_SIZE) == 0;
+}
 
 /* Writes SIZE bytes from BUFFER to the current WARC file,
    through gzwrite or zstd if compression is enabled.
@@ -1447,7 +1434,6 @@ store_warc_record (const char *uri, const char *date, const char *uuid,
   rec->date = xstrdup (date);
   rec->uuid = xstrdup (uuid);
   key->uri = xstrdup (uri);
-  memcpy (rec->digest, digest, SHA1_DIGEST_SIZE);
   memcpy (key->digest, digest, SHA1_DIGEST_SIZE);
 
   hash_table_put (warc_dedup_table, key, rec);
@@ -1712,11 +1698,7 @@ warc_find_duplicate_cdx_record (const char *url, const char *sha1_digest_payload
   xfree (key->uri);
   xfree (key);
 
-  if (rec_existing && memcmp (rec_existing->digest, sha1_digest_payload, SHA1_DIGEST_SIZE) == 0
-      && (opt.warc_dedup_url_agnostic || strcmp (rec_existing->uri, url) == 0))
-    return rec_existing;
-  else
-    return NULL;
+  return rec_existing;
 }
 
 /* Initializes the WARC writer (if opt.warc_filename is set).
@@ -1728,9 +1710,12 @@ warc_init (void)
 
   if (opt.warc_filename != NULL)
     {
-      /* init the hash table */
-      warc_dedup_table = hash_table_new (1000, warc_hash_sha1_digest,
-                                         warc_cmp_sha1_digest);
+      /* Initialize the hash table. If URL agnostic deduplication is enabled,
+      the URL will not be taken into account when doing a hash table lookup */
+      if (opt.warc_dedup_url_agnostic)
+        warc_dedup_table = hash_table_new (1000, warc_hash_url_agnostic, warc_cmp_url_agnostic);
+      else
+        warc_dedup_table = hash_table_new (1000, warc_hash_url_gnostic, warc_cmp_url_gnostic);
 
       if (opt.warc_cdx_dedup_filename != NULL)
         {
@@ -2187,7 +2172,6 @@ warc_write_response_record (const char *url, const char *timestamp_str,
               rec_existing->uri = revisit_cdx->target_uri;
               rec_existing->date = revisit_cdx->date;
               rec_existing->uuid = revisit_cdx->response_uuid;
-              memcpy (rec_existing->digest, sha1_res_payload, SHA1_DIGEST_SIZE);
 
               xfree(revisit_cdx);
               luahooks_revisit_malloc = true;

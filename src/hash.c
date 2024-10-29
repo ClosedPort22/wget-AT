@@ -638,7 +638,7 @@ hash_table_count (const struct hash_table *ht)
 #ifdef __clang__
 __attribute__((no_sanitize("integer")))
 #endif
-static unsigned long
+unsigned long
 hash_string (const void *key)
 {
   const char *p = key;
