@@ -185,6 +185,7 @@ static struct {
   { TAG_FIG,            "src",            ATTR_INLINE },
   { TAG_FRAME,          "src",            ATTR_INLINE | ATTR_HTML },
   { TAG_IFRAME,         "src",            ATTR_INLINE | ATTR_HTML },
+  { TAG_IMG,            "data-original",  ATTR_HTML },
   { TAG_IMG,            "data-src",       ATTR_HTML },
   { TAG_IMG,            "href",           ATTR_HTML },
   { TAG_IMG,            "longdesc",       ATTR_HTML },
